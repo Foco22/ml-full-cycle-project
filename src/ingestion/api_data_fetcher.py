@@ -108,7 +108,7 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
 
     def build_url(self, currency: str, year: str, month: str) -> str:
         """Build API URL for CMF Chile"""
-        return f"{self.BASE_URL}/{currency}/posteriores/{year}/{month}?apikey={self.api_key}&formato=xml"
+        return f"{self.BASE_URL}/{currency}/{year}/{month}?apikey={self.api_key}&formato=xml"
 
     def parse_response(self, response_data: bytes, currency_code: str = 'valor') -> pd.DataFrame:
         """Parse XML response from CMF Chile API"""
@@ -210,7 +210,12 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
             except Exception as e:
                 self.logger.warning(f"Failed to fetch {currency}: {str(e)}")
 
-        if merge and dfs:
+        if not dfs:
+            # No data fetched for any currency
+            self.logger.warning("No data fetched for any currency")
+            return pd.DataFrame() if merge else {}
+
+        if merge:
             # Merge all currencies on Fecha
             df_merged = list(dfs.values())[0]
             for df in list(dfs.values())[1:]:
@@ -259,7 +264,11 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
 
             try:
                 df_month = self.fetch(currencies=currencies, year=year, month=month, merge=True)
-                all_data.append(df_month)
+                # Only append if we got valid DataFrame data
+                if isinstance(df_month, pd.DataFrame) and not df_month.empty:
+                    all_data.append(df_month)
+                elif df_month.empty:
+                    self.logger.warning(f"No data returned for {year}-{month}")
             except Exception as e:
                 self.logger.warning(f"Failed to fetch data for {year}-{month}: {str(e)}")
 
