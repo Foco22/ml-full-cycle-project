@@ -81,40 +81,44 @@ class BigQueryLoader:
         except NotFound:
             self.logger.info(f"Creating table {table_ref} with inferred schema")
 
-            # Let BigQuery infer schema from DataFrame
-            # Create a small job config to get schema
-            job_config = bigquery.LoadJobConfig(
-                autodetect=True,
-                write_disposition="WRITE_EMPTY"
-            )
+            # Infer schema from DataFrame
+            job_config = bigquery.LoadJobConfig(autodetect=True)
 
-            # Create empty table with inferred schema
-            temp_table = bigquery.Table(table_ref)
-            temp_table.description = description
+            # Load sample data to a temporary location to infer schema
+            temp_table_id = f"{table_id}_temp_schema"
+            temp_table_ref = f"{self.project_id}.{self.dataset_id}.{temp_table_id}"
+
+            # Load sample data to infer schema
+            sample_data = df_sample.head(1)
+            job = self.client.load_table_from_dataframe(
+                sample_data, temp_table_ref, job_config=job_config
+            )
+            job.result()
+
+            # Get the inferred schema
+            temp_table = self.client.get_table(temp_table_ref)
+            schema = temp_table.schema
+
+            # Delete the temporary table
+            self.client.delete_table(temp_table_ref)
+
+            # Now create the actual table with the schema and partitioning
+            table = bigquery.Table(table_ref, schema=schema)
+            table.description = description
 
             # Add partitioning if specified
             if partition_field:
-                temp_table.time_partitioning = bigquery.TimePartitioning(
+                table.time_partitioning = bigquery.TimePartitioning(
                     type_=bigquery.TimePartitioningType.DAY,
                     field=partition_field
                 )
 
             # Add clustering if specified
             if cluster_fields:
-                temp_table.clustering_fields = cluster_fields
+                table.clustering_fields = cluster_fields
 
-            # First create the table structure
-            temp_table = self.client.create_table(temp_table)
-
-            # Load sample data to establish schema (then delete)
-            sample_data = df_sample.head(1)
-            self.client.load_table_from_dataframe(
-                sample_data, table_ref, job_config=job_config
-            ).result()
-
-            # Delete the sample row
-            delete_query = f"DELETE FROM `{table_ref}` WHERE TRUE"
-            self.client.query(delete_query).result()
+            # Create the table with schema and partitioning
+            table = self.client.create_table(table)
 
             self.logger.info(f"Created table {table_ref} with dynamic schema")
             return self.client.get_table(table_ref)
