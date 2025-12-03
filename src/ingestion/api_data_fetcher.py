@@ -106,9 +106,23 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
 
     BASE_URL = "https://api.cmfchile.cl/api-sbifv3/recursos_api"
 
-    def build_url(self, currency: str, year: str, month: str) -> str:
-        """Build API URL for CMF Chile"""
-        return f"{self.BASE_URL}/{currency}/{year}/{month}?apikey={self.api_key}&formato=xml"
+    def build_url(self, currency: str, year: str, month: str, use_posteriores: bool = True) -> str:
+        """
+        Build API URL for CMF Chile
+
+        Args:
+            currency: Currency type (dolar, euro, uf)
+            year: Year in YYYY format
+            month: Month in MM format
+            use_posteriores: If True, use /posteriores/ endpoint to get all dates after year/month
+
+        Returns:
+            API URL string
+        """
+        if use_posteriores:
+            return f"{self.BASE_URL}/{currency}/posteriores/{year}/{month}?apikey={self.api_key}&formato=xml"
+        else:
+            return f"{self.BASE_URL}/{currency}/{year}/{month}?apikey={self.api_key}&formato=xml"
 
     def parse_response(self, response_data: bytes, currency_code: str = 'valor') -> pd.DataFrame:
         """Parse XML response from CMF Chile API"""
@@ -133,7 +147,8 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
         self,
         currency_type: str,
         year: Optional[str] = None,
-        month: Optional[str] = None
+        month: Optional[str] = None,
+        use_posteriores: bool = True
     ) -> pd.DataFrame:
         """
         Fetch data for a specific currency
@@ -142,6 +157,7 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
             currency_type: Currency code (e.g., 'usd', 'eur', 'uf')
             year: Year to fetch (defaults to current year)
             month: Month to fetch (defaults to current month)
+            use_posteriores: If True, use /posteriores/ endpoint (for historical data)
 
         Returns:
             DataFrame with currency data
@@ -163,9 +179,12 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
             month = now.strftime("%m")
 
         api_currency = currency_map[currency_type]['api']
-        url = self.build_url(api_currency, year, month)
+        url = self.build_url(api_currency, year, month, use_posteriores=use_posteriores)
 
-        self.logger.info(f"Fetching {currency_type.upper()} data for {year}-{month}")
+        if use_posteriores:
+            self.logger.info(f"Fetching {currency_type.upper()} data from {year}-{month} onwards (posteriores)")
+        else:
+            self.logger.info(f"Fetching {currency_type.upper()} data for {year}-{month}")
 
         # Fetch and parse data
         xml_data = self.fetch_data(url)
@@ -183,7 +202,8 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
         currencies: Optional[List[str]] = None,
         year: Optional[str] = None,
         month: Optional[str] = None,
-        merge: bool = True
+        merge: bool = True,
+        use_posteriores: bool = True
     ) -> pd.DataFrame:
         """
         Fetch data for multiple currencies
@@ -193,6 +213,7 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
             year: Year to fetch
             month: Month to fetch
             merge: If True, merge all currencies into single DataFrame
+            use_posteriores: If True, use /posteriores/ endpoint for historical data
 
         Returns:
             DataFrame with all data
@@ -206,7 +227,7 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
         dfs = {}
         for currency in currencies:
             try:
-                dfs[currency] = self.fetch_currency(currency, year, month)
+                dfs[currency] = self.fetch_currency(currency, year, month, use_posteriores=use_posteriores)
             except Exception as e:
                 self.logger.warning(f"Failed to fetch {currency}: {str(e)}")
 
@@ -252,44 +273,72 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
         if currencies is None:
             currencies = ['usd', 'eur', 'uf']
 
-        self.logger.info(f"Fetching data from {start_date} to {end_date}")
+        self.logger.info(f"Fetching data from {start_date.date()} to {end_date.date()}")
 
-        all_data = []
+        # Calculate date range span
+        days_span = (end_date - start_date).days
 
-        # Iterate through months
-        current_date = start_date.replace(day=1)
-        while current_date <= end_date:
-            year = current_date.strftime("%Y")
-            month = current_date.strftime("%m")
+        # Optimization: For large date ranges (> 90 days), use /posteriores/ endpoint
+        # which returns all data from a starting point in a single API call
+        if days_span > 90:
+            self.logger.info(f"Large date range detected ({days_span} days). Using optimized /posteriores/ endpoint.")
+            # Use a date well before our start_date to ensure we get all data
+            # The API's posteriores endpoint returns data from 1990 onwards when given 1900/01
+            year = "1900"
+            month = "01"
 
-            try:
-                df_month = self.fetch(currencies=currencies, year=year, month=month, merge=True)
-                # Only append if we got valid DataFrame data
-                if isinstance(df_month, pd.DataFrame) and not df_month.empty:
-                    all_data.append(df_month)
-                elif df_month.empty:
-                    self.logger.warning(f"No data returned for {year}-{month}")
-            except Exception as e:
-                self.logger.warning(f"Failed to fetch data for {year}-{month}: {str(e)}")
+            df_all = self.fetch(currencies=currencies, year=year, month=month, merge=True, use_posteriores=True)
 
-            # Move to next month
-            current_date = (current_date + timedelta(days=32)).replace(day=1)
+            if isinstance(df_all, pd.DataFrame) and not df_all.empty:
+                # Filter to exact date range
+                df_filtered = df_all[
+                    (df_all['Fecha'] >= start_date) &
+                    (df_all['Fecha'] <= end_date)
+                ]
+                self.logger.info(f"Total records fetched: {len(df_filtered)}")
+                return df_filtered
+            else:
+                self.logger.warning("No data returned from API")
+                return pd.DataFrame()
 
-        # Combine all data
-        if all_data:
-            df_combined = pd.concat(all_data, ignore_index=True)
-            df_combined = df_combined.drop_duplicates(subset=['Fecha']).reset_index(drop=True)
-
-            # Filter to exact date range
-            df_combined = df_combined[
-                (df_combined['Fecha'] >= start_date) &
-                (df_combined['Fecha'] <= end_date)
-            ]
-
-            self.logger.info(f"Total records fetched: {len(df_combined)}")
-            return df_combined
+        # For smaller date ranges, iterate through months (more precise)
         else:
-            return pd.DataFrame()
+            all_data = []
+
+            # Iterate through months
+            current_date = start_date.replace(day=1)
+            while current_date <= end_date:
+                year = current_date.strftime("%Y")
+                month = current_date.strftime("%m")
+
+                try:
+                    df_month = self.fetch(currencies=currencies, year=year, month=month, merge=True, use_posteriores=False)
+                    # Only append if we got valid DataFrame data
+                    if isinstance(df_month, pd.DataFrame) and not df_month.empty:
+                        all_data.append(df_month)
+                    elif df_month.empty:
+                        self.logger.warning(f"No data returned for {year}-{month}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to fetch data for {year}-{month}: {str(e)}")
+
+                # Move to next month
+                current_date = (current_date + timedelta(days=32)).replace(day=1)
+
+            # Combine all data
+            if all_data:
+                df_combined = pd.concat(all_data, ignore_index=True)
+                df_combined = df_combined.drop_duplicates(subset=['Fecha']).reset_index(drop=True)
+
+                # Filter to exact date range
+                df_combined = df_combined[
+                    (df_combined['Fecha'] >= start_date) &
+                    (df_combined['Fecha'] <= end_date)
+                ]
+
+                self.logger.info(f"Total records fetched: {len(df_combined)}")
+                return df_combined
+            else:
+                return pd.DataFrame()
 
     def prepare_for_bigquery(self, df: pd.DataFrame, metadata: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
         """
