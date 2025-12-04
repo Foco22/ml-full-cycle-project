@@ -364,6 +364,18 @@ class CMFChileAPIFetcher(BaseAPIFetcher):
                     df_prepared[col] = df_prepared[col].astype(str).str.replace(',', '.')
                     df_prepared[col] = pd.to_numeric(df_prepared[col], errors='coerce')
 
+        # Forward-fill missing values for weekends and holidays
+        # Sort by date first to ensure proper forward-filling
+        df_prepared = df_prepared.sort_values('Fecha').reset_index(drop=True)
+
+        # Identify currency/exchange rate columns (exclude metadata columns)
+        value_columns = [col for col in df_prepared.columns
+                        if col not in ['Fecha', 'ingestion_timestamp', 'data_source']]
+
+        # Forward-fill null values (weekends/holidays use previous business day values)
+        for col in value_columns:
+            df_prepared[col] = df_prepared[col].ffill()
+
         # Add metadata columns
         df_prepared['ingestion_timestamp'] = datetime.now()
         df_prepared['data_source'] = 'CMF_Chile_API'
