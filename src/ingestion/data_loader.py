@@ -142,38 +142,6 @@ class DataLoader:
             self.logger.error(f"Error loading data from BigQuery: {str(e)}")
             raise
 
-    def load_from_local(self, file_path: str, file_format: str = "csv") -> pd.DataFrame:
-        """
-        Load data from local file
-
-        Args:
-            file_path: Path to local file
-            file_format: File format ('csv', 'parquet', 'json', 'excel')
-
-        Returns:
-            DataFrame with data
-        """
-        try:
-            self.logger.info(f"Loading data from local file: {file_path}")
-
-            if file_format == "csv":
-                df = pd.read_csv(file_path)
-            elif file_format == "parquet":
-                df = pd.read_parquet(file_path)
-            elif file_format == "json":
-                df = pd.read_json(file_path)
-            elif file_format == "excel":
-                df = pd.read_excel(file_path)
-            else:
-                raise ValueError(f"Unsupported file format: {file_format}")
-
-            self.logger.info(f"Loaded {len(df)} rows from local file")
-            return df
-
-        except Exception as e:
-            self.logger.error(f"Error loading data from local file: {str(e)}")
-            raise
-
     def save_to_gcs(self, df: pd.DataFrame, blob_path: str, file_format: str = "csv"):
         """
         Save DataFrame to Google Cloud Storage
@@ -215,29 +183,3 @@ class DataLoader:
             self.logger.error(f"Error saving data to GCS: {str(e)}")
             raise
 
-    def save_to_local(self, df: pd.DataFrame, file_path: str, file_format: str = "csv"):
-        """
-        Save DataFrame to local file
-
-        Args:
-            df: DataFrame to save
-            file_path: Path to save file
-            file_format: File format ('csv', 'parquet', 'json')
-        """
-        try:
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-            if file_format == "csv":
-                df.to_csv(file_path, index=False)
-            elif file_format == "parquet":
-                df.to_parquet(file_path, index=False)
-            elif file_format == "json":
-                df.to_json(file_path, orient='records')
-            else:
-                raise ValueError(f"Unsupported file format: {file_format}")
-
-            self.logger.info(f"Saved {len(df)} rows to local file: {file_path}")
-
-        except Exception as e:
-            self.logger.error(f"Error saving data to local file: {str(e)}")
-            raise

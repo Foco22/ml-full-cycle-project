@@ -79,12 +79,10 @@ jobs:
 
           if [ "$MODE" = "backfill" ]; then
             python pipelines/data_ingestion_pipeline.py \
-              --source api \
               --mode backfill \
               --backfill-days $BACKFILL_DAYS
           else
             python pipelines/data_ingestion_pipeline.py \
-              --source api \
               --mode $MODE
           fi
 

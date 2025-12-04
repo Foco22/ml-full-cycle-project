@@ -1,7 +1,6 @@
 """
-Generic Data Ingestion Pipeline
-Fetches data from any source and loads it into BigQuery
-Supports multiple data sources and can be easily extended
+Exchange Rate Data Ingestion Pipeline
+Fetches exchange rate data from CMF Chile API and loads it into BigQuery
 """
 
 import sys
@@ -12,35 +11,31 @@ import argparse
 from datetime import datetime, timedelta
 import logging
 
-from src.ingestion.api_data_fetcher import BaseAPIFetcher, CMFChileAPIFetcher
-from src.ingestion.data_loader import DataLoader
+from src.ingestion.api_data_fetcher import CMFChileAPIFetcher
 from src.ingestion.bigquery_loader import BigQueryLoader
 from src.utils.logger import setup_logger
 from src.utils.config_loader import load_config
 
 
 def run_pipeline(
-    source_type: str,
     config_path: str = "config/config.yaml",
     secrets_path: str = "config/secrets.yaml",
     mode: str = "incremental",
     **kwargs
 ):
     """
-    Run the generic data ingestion pipeline
+    Run the exchange rate data ingestion pipeline
 
     Args:
-        source_type: Type of data source ('api', 'sql', 'gcs', 'local')
         config_path: Path to configuration file
         secrets_path: Path to secrets file
         mode: Pipeline mode ('incremental', 'full', 'backfill')
-        **kwargs: Additional arguments specific to source type
+        **kwargs: Additional arguments (backfill_days)
     """
     # Setup logging
     logger = setup_logger("data_ingestion_pipeline")
     logger.info("="*60)
-    logger.info("Starting Data Ingestion Pipeline")
-    logger.info(f"Source Type: {source_type}")
+    logger.info("Starting Exchange Rate Data Ingestion Pipeline")
     logger.info(f"Mode: {mode}")
     logger.info("="*60)
 
@@ -64,23 +59,8 @@ def run_pipeline(
         logger.info("Setting up BigQuery dataset")
         bq_loader.create_dataset(location=config['gcp']['region'])
 
-        # Fetch data based on source type
-        df = None
-
-        if source_type == 'api':
-            df = fetch_from_api(config, secrets, mode, logger, **kwargs)
-
-        elif source_type == 'sql':
-            df = fetch_from_sql(config, secrets, logger, **kwargs)
-
-        elif source_type == 'gcs':
-            df = fetch_from_gcs(config, secrets, logger, **kwargs)
-
-        elif source_type == 'local':
-            df = fetch_from_local(config, secrets, logger, **kwargs)
-
-        else:
-            raise ValueError(f"Unsupported source type: {source_type}")
+        # Fetch data from API
+        df = fetch_from_api(config, secrets, mode, logger, **kwargs)
 
         if df is None or df.empty:
             logger.warning("No data fetched. Pipeline completed with no data to load.")
@@ -93,7 +73,7 @@ def run_pipeline(
         bq_loader.create_table_from_dataframe(
             table_id=table_id,
             df_sample=df,
-            description=f"Data from {source_type}",
+            description="Exchange rate data from CMF Chile API",
             partition_field=dataset_config.get('partition_field'),
             cluster_fields=dataset_config.get('cluster_fields')
         )
@@ -187,68 +167,8 @@ def fetch_from_api(config, secrets, mode, logger, **kwargs):
     return df
 
 
-def fetch_from_sql(config, secrets, logger, **kwargs):
-    """Fetch data from SQL source"""
-    query = kwargs.get('query')
-    if not query:
-        raise ValueError("SQL query is required for SQL source")
-
-    environment = kwargs.get('environment', 'dev')
-
-    data_loader = DataLoader(config, secrets)
-    logger.info(f"Fetching data from SQL ({environment})")
-    df = data_loader.load_from_sql(query, environment)
-
-    # Add metadata
-    df['ingestion_timestamp'] = datetime.now()
-    df['data_source'] = f'SQL_{environment}'
-
-    return df
-
-
-def fetch_from_gcs(config, secrets, logger, **kwargs):
-    """Fetch data from Google Cloud Storage"""
-    blob_path = kwargs.get('blob_path')
-    if not blob_path:
-        raise ValueError("blob_path is required for GCS source")
-
-    file_format = kwargs.get('file_format', 'csv')
-
-    data_loader = DataLoader(config, secrets)
-    logger.info(f"Fetching data from GCS: {blob_path}")
-    df = data_loader.load_from_gcs(blob_path, file_format)
-
-    # Add metadata
-    df['ingestion_timestamp'] = datetime.now()
-    df['data_source'] = f'GCS_{blob_path}'
-
-    return df
-
-
-def fetch_from_local(config, secrets, logger, **kwargs):
-    """Fetch data from local file"""
-    file_path = kwargs.get('file_path')
-    if not file_path:
-        raise ValueError("file_path is required for local source")
-
-    file_format = kwargs.get('file_format', 'csv')
-
-    data_loader = DataLoader(config, secrets)
-    logger.info(f"Fetching data from local file: {file_path}")
-    df = data_loader.load_from_local(file_path, file_format)
-
-    # Add metadata
-    df['ingestion_timestamp'] = datetime.now()
-    df['data_source'] = f'LOCAL_{file_path}'
-
-    return df
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run generic data ingestion pipeline")
-    parser.add_argument("--source", required=True,
-                       choices=["api", "sql", "gcs", "local"],
-                       help="Data source type")
+    parser = argparse.ArgumentParser(description="Run exchange rate data ingestion pipeline")
     parser.add_argument("--config", default="config/config.yaml",
                        help="Path to config file")
     parser.add_argument("--secrets", default="config/secrets.yaml",
@@ -259,32 +179,11 @@ if __name__ == "__main__":
     parser.add_argument("--backfill-days", type=int, default=7,
                        help="Number of days to backfill (for backfill mode)")
 
-    # Source-specific arguments
-    parser.add_argument("--query", help="SQL query (for SQL source)")
-    parser.add_argument("--blob-path", help="GCS blob path (for GCS source)")
-    parser.add_argument("--file-path", help="Local file path (for local source)")
-    parser.add_argument("--file-format", default="csv",
-                       help="File format (csv, parquet, json)")
-    parser.add_argument("--environment", default="dev",
-                       choices=["dev", "prod"],
-                       help="SQL environment (for SQL source)")
-
     args = parser.parse_args()
 
-    # Prepare kwargs based on source type
-    kwargs = {
-        'backfill_days': args.backfill_days,
-        'query': args.query,
-        'blob_path': args.blob_path,
-        'file_path': args.file_path,
-        'file_format': args.file_format,
-        'environment': args.environment
-    }
-
     run_pipeline(
-        source_type=args.source,
         config_path=args.config,
         secrets_path=args.secrets,
         mode=args.mode,
-        **kwargs
+        backfill_days=args.backfill_days
     )
