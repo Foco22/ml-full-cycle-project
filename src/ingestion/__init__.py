@@ -1,6 +1,7 @@
 """Data Ingestion Package"""
 
-from .data_loader import DataLoader
+from .api_data_fetcher import CMFChileAPIFetcher
+from .bigquery_loader import BigQueryLoader
 from .preprocessor import DataPreprocessor
 
-__all__ = ['DataLoader', 'DataPreprocessor']
+__all__ = ['CMFChileAPIFetcher', 'BigQueryLoader', 'DataPreprocessor']
