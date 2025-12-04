@@ -76,52 +76,71 @@ class BigQueryLoader:
 
         try:
             table = self.client.get_table(table_ref)
-            self.logger.info(f"Table {table_ref} already exists")
-            return table
+
+            # Check if partitioning type matches expectations
+            if partition_field and table.time_partitioning:
+                if table.time_partitioning.type_ != bigquery.TimePartitioningType.MONTH:
+                    self.logger.warning(
+                        f"Table {table_ref} exists but has {table.time_partitioning.type_} partitioning instead of MONTH. "
+                        "Deleting and recreating table with correct partitioning."
+                    )
+                    self.client.delete_table(table_ref)
+                    # Fall through to create new table
+                else:
+                    self.logger.info(f"Table {table_ref} already exists with correct partitioning")
+                    return table
+            else:
+                self.logger.info(f"Table {table_ref} already exists")
+                return table
         except NotFound:
-            self.logger.info(f"Creating table {table_ref} with inferred schema")
+            pass
 
-            # Infer schema from DataFrame
-            job_config = bigquery.LoadJobConfig(autodetect=True)
+        # Create new table
+        self.logger.info(f"Creating table {table_ref} with inferred schema")
 
-            # Load sample data to a temporary location to infer schema
-            temp_table_id = f"{table_id}_temp_schema"
-            temp_table_ref = f"{self.project_id}.{self.dataset_id}.{temp_table_id}"
+        # Infer schema from DataFrame
+        job_config = bigquery.LoadJobConfig(autodetect=True)
 
-            # Load sample data to infer schema
-            sample_data = df_sample.head(1)
-            job = self.client.load_table_from_dataframe(
-                sample_data, temp_table_ref, job_config=job_config
+        # Load sample data to a temporary location to infer schema
+        temp_table_id = f"{table_id}_temp_schema"
+        temp_table_ref = f"{self.project_id}.{self.dataset_id}.{temp_table_id}"
+
+        # Load sample data to infer schema
+        sample_data = df_sample.head(1)
+        job = self.client.load_table_from_dataframe(
+            sample_data, temp_table_ref, job_config=job_config
+        )
+        job.result()
+
+        # Get the inferred schema
+        temp_table = self.client.get_table(temp_table_ref)
+        schema = temp_table.schema
+
+        # Delete the temporary table
+        self.client.delete_table(temp_table_ref)
+
+        # Now create the actual table with the schema and partitioning
+        table = bigquery.Table(table_ref, schema=schema)
+        table.description = description
+
+        # Add partitioning if specified
+        if partition_field:
+            # Use MONTH partitioning to avoid exceeding 4000 partition limit
+            # For historical data spanning decades, MONTH is more appropriate than DAY
+            table.time_partitioning = bigquery.TimePartitioning(
+                type_=bigquery.TimePartitioningType.MONTH,
+                field=partition_field
             )
-            job.result()
 
-            # Get the inferred schema
-            temp_table = self.client.get_table(temp_table_ref)
-            schema = temp_table.schema
+        # Add clustering if specified
+        if cluster_fields:
+            table.clustering_fields = cluster_fields
 
-            # Delete the temporary table
-            self.client.delete_table(temp_table_ref)
+        # Create the table with schema and partitioning
+        table = self.client.create_table(table)
 
-            # Now create the actual table with the schema and partitioning
-            table = bigquery.Table(table_ref, schema=schema)
-            table.description = description
-
-            # Add partitioning if specified
-            if partition_field:
-                table.time_partitioning = bigquery.TimePartitioning(
-                    type_=bigquery.TimePartitioningType.DAY,
-                    field=partition_field
-                )
-
-            # Add clustering if specified
-            if cluster_fields:
-                table.clustering_fields = cluster_fields
-
-            # Create the table with schema and partitioning
-            table = self.client.create_table(table)
-
-            self.logger.info(f"Created table {table_ref} with dynamic schema")
-            return self.client.get_table(table_ref)
+        self.logger.info(f"Created table {table_ref} with dynamic schema")
+        return self.client.get_table(table_ref)
 
     def create_exchange_rate_table(self, table_id: str = "exchange_rates") -> bigquery.Table:
         """
