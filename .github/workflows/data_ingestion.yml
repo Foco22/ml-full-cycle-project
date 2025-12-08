@@ -74,7 +74,7 @@ jobs:
 
       - name: Run exchange rate pipeline
         run: |
-          MODE="${{ github.event.inputs.mode || 'incremental' }}"
+          MODE="${{ github.event.inputs.mode || 'backfill' }}"
           BACKFILL_DAYS="${{ github.event.inputs.backfill_days || '7' }}"
 
           if [ "$MODE" = "backfill" ]; then
