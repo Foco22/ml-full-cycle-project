@@ -10,6 +10,7 @@ Automated pipeline that fetches exchange rate data (USD, EUR, UF) from CMF Chile
 
 ### 1. Configure GCP (5 min)
 
+
 ```bash
 ./setup_github_actions.sh
 ```
