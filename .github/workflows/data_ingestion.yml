@@ -47,10 +47,42 @@ jobs:
             echo "ERROR: Credentials file not found at: $GOOGLE_APPLICATION_CREDENTIALS"
           fi
 
-      - name: Configure GCP project
+      - name: Create config.yaml from GitHub secrets
         run: |
-          # Update config.yaml with actual GCP project ID from secrets
-          sed -i "s/your-gcp-project-id/${{ secrets.GCP_PROJECT_ID }}/g" config/config.yaml
+          cat > config/config.yaml << EOF
+          gcp:
+            project_id: "${{ secrets.GCP_PROJECT_ID }}"
+            region: "us-central1"
+            bucket_name: "your-ml-bucket"
+
+          api:
+            type: "cmf_chile"
+            currencies: ["usd", "eur", "uf"]
+            currency_map:
+              usd:
+                api: "dolar"
+                column: "usdclp_obs"
+              eur:
+                api: "euro"
+                column: "eurclp_obs"
+              uf:
+                api: "uf"
+                column: "ufclp"
+
+          pipeline:
+            mode: "full"
+            dataset:
+              dataset_id: "data_ingestion"
+              table_id: "raw_data"
+              partition_field: "Fecha"
+              cluster_fields: ["Fecha"]
+              merge_key: "Fecha"
+
+          logging:
+            level: "INFO"
+            log_dir: "logs"
+            log_file: "ml_pipeline.log"
+          EOF
 
       - name: Create secrets.yaml from GitHub secrets
         run: |
