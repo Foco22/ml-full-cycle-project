@@ -49,6 +49,7 @@ jobs:
 
       - name: Create config.yaml from GitHub secrets
         run: |
+          mkdir -p config
           cat > config/config.yaml << EOF
           gcp:
             project_id: "${{ secrets.GCP_PROJECT_ID }}"
