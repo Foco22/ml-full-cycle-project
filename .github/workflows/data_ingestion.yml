@@ -1,26 +1,16 @@
 name: Exchange Rate Data Ingestion
 
 on:
+  push:
+    branches:
+      - main
+
   schedule:
     # Run daily at 9 AM UTC (adjust to your timezone)
     - cron: '0 9 * * *'
 
   workflow_dispatch:
-    # Allow manual trigger
-    inputs:
-      mode:
-        description: 'Pipeline mode'
-        required: true
-        default: 'incremental'
-        type: choice
-        options:
-          - incremental
-          - full
-          - backfill
-      backfill_days:
-        description: 'Number of days to backfill (only for backfill mode)'
-        required: false
-        default: '7'
+    # Allow manual trigger (always runs in full mode)
 
 jobs:
   ingest_data:
@@ -72,19 +62,9 @@ jobs:
             credentials_path: ""
           EOF
 
-      - name: Run exchange rate pipeline
+      - name: Run exchange rate pipeline (full mode)
         run: |
-          MODE="${{ github.event.inputs.mode || 'backfill' }}"
-          BACKFILL_DAYS="${{ github.event.inputs.backfill_days || '7' }}"
-
-          if [ "$MODE" = "backfill" ]; then
-            python pipelines/data_ingestion_pipeline.py \
-              --mode backfill \
-              --backfill-days $BACKFILL_DAYS
-          else
-            python pipelines/data_ingestion_pipeline.py \
-              --mode $MODE
-          fi
+          python pipelines/data_ingestion_pipeline.py --mode full
 
       - name: Upload logs
         if: always()
