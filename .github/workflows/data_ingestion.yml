@@ -95,6 +95,10 @@ jobs:
             credentials_path: ""
           EOF
 
+      - name: Run ingestion tests
+        run: |
+          pytest tests/ingest_test.py -v
+
       - name: Run exchange rate pipeline (full mode)
         run: |
           python pipelines/data_ingestion_pipeline.py --mode full
