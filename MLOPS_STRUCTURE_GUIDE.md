@@ -261,6 +261,8 @@ def get_balanced_params():
         'random_state': 42
     }
 
+
+
 def build_xgboost_model(config=None):
     """Build XGBoost model with config"""
     import xgboost as xgb
