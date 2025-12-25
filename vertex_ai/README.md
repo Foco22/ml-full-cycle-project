@@ -170,4 +170,4 @@ gs://ml-project-forecast/
 │   └── plots/             # Validation plots
 └── logs/training/YYYYMMDD_HHMMSS/
     └── training.log       # Training logs
-```
+```# Trigger training workflow
