@@ -51,26 +51,6 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Verify required GCP APIs are enabled
-        run: |
-          echo "Checking required APIs..."
-          REQUIRED_APIS=(
-            "artifactregistry.googleapis.com"
-            "containerregistry.googleapis.com"
-            "cloudbuild.googleapis.com"
-            "aiplatform.googleapis.com"
-          )
-
-          for api in "${REQUIRED_APIS[@]}"; do
-            if gcloud services list --enabled --project=${{ secrets.GCP_PROJECT_ID }} | grep -q "$api"; then
-              echo "✓ $api is enabled"
-            else
-              echo "✗ $api is NOT enabled"
-              echo "Enable it with: gcloud services enable $api --project=${{ secrets.GCP_PROJECT_ID }}"
-              exit 1
-            fi
-          done
-
       - name: Configure Docker for GCR
         run: |
           gcloud auth configure-docker gcr.io --quiet
