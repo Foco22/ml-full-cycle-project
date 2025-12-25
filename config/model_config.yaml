@@ -1,0 +1,110 @@
+# Model configuration for model_balanced
+# Extracted from notebooks/notebook.ipynb
+# Created: 2025-12-24
+
+model:
+  name: model_balanced
+  type: xgboost
+  task: regression
+  version: v1
+  description: "Balanced XGBoost model with 13 features - best performance with lowest overfitting"
+
+# XGBoost hyperparameters (exact values from notebook)
+hyperparameters:
+  # Tree structure
+  max_depth: 5
+  min_child_weight: 4
+
+  # Regularization (balanced approach)
+  reg_alpha: 0.5          # L1 regularization
+  reg_lambda: 1.5         # L2 regularization
+  gamma: 0.15             # Minimum loss reduction for split
+
+  # Sampling (prevent overfitting)
+  subsample: 0.75         # 75% row sampling per tree
+  colsample_bytree: 0.75  # 75% column sampling per tree
+
+  # Learning parameters
+  learning_rate: 0.04
+  n_estimators: 250
+  early_stopping_rounds: 20
+
+  # Objective and system
+  objective: reg:squarederror
+  random_state: 42
+  tree_method: hist
+  verbosity: 0
+  n_jobs: -1
+
+# Feature configuration (13 balanced features)
+features:
+  count: 13
+  selection_method: "feature_importance_threshold"
+  description: "Features selected from 70 original features based on importance > 0.0001"
+
+  # The 13 features used by model_balanced
+  names:
+    # Lag features (3)
+    - lag_1d              # Price 1 day ago
+    - lag_2d              # Price 2 days ago
+    - lag_3d              # Price 3 days ago
+
+    # Rolling mean features (2)
+    - rolling_mean_7d     # 7-day rolling average
+    - rolling_mean_30d    # 30-day rolling average
+
+    # Rolling max features (3)
+    - rolling_max_7d      # 7-day rolling maximum
+    - rolling_max_14d     # 14-day rolling maximum
+    - rolling_max_30d     # 30-day rolling maximum
+
+    # Rolling min features (3)
+    - rolling_min_7d      # 7-day rolling minimum
+    - rolling_min_14d     # 14-day rolling minimum
+    - rolling_min_30d     # 30-day rolling minimum
+
+    # Technical indicators (2)
+    - bollinger_lower     # Lower Bollinger Band (20-day)
+    - ratio_vs_ma7        # Price / 7-day moving average
+
+# Target variable
+target:
+  name: usdclp_obs
+  description: "USD/CLP exchange rate (US Dollar to Chilean Peso)"
+  unit: "CLP per USD"
+
+# Validation configuration
+validation:
+  test_size: 0.2        # Use last 20% for testing (temporal split)
+  shuffle: false        # CRITICAL: Don't shuffle time series data
+  random_state: 42
+
+  # Metrics to calculate
+  metrics:
+    - rmse              # Root Mean Squared Error (primary metric)
+    - r2                # R-squared score
+    - mae               # Mean Absolute Error
+
+  # Performance thresholds (based on notebook results)
+  thresholds:
+    min_r2_test: 0.85           # Test R² should be >= 0.85
+    max_rmse_test: 10.0         # Test RMSE should be <= 10.0 CLP
+    max_overfitting_gap: 0.15   # R² gap (train - test) should be <= 0.15
+
+# Baseline performance (from notebook)
+baseline_metrics:
+  train:
+    rmse: 1.42
+    r2: 0.9999
+  test:
+    rmse: 7.05
+    r2: 0.9055
+  gap:
+    rmse: 5.63
+    r2: 0.0944
+
+# Data preprocessing
+preprocessing:
+  scaling: null         # NO scaling required for XGBoost
+  handle_missing: drop  # Drop rows with NaN from lag features
+  max_lag_days: 365     # Maximum lag creates NaN for first 365 days

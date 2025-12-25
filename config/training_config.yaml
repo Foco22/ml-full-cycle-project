@@ -1,0 +1,281 @@
+# Training configuration for model_balanced with Vertex AI
+# Created: 2025-12-24
+
+# Google Cloud Platform settings
+gcp:
+  project_id: ${GCP_PROJECT_ID}  # Set via environment variable or secrets
+  region: us-central1              # Vertex AI region
+
+  # GCS bucket configuration (Using single bucket with subfolders - MLOps best practice)
+  bucket: ml-project-forecast
+
+  # Legacy bucket variables (for compatibility, all point to same bucket with different paths)
+  buckets:
+    data: gs://ml-project-forecast/data
+    models: gs://ml-project-forecast/models
+    artifacts: gs://ml-project-forecast/artifacts
+    logs: gs://ml-project-forecast/logs
+
+  # Vertex AI training configuration
+  vertex_ai:
+    enabled: true
+    service_account: ${VERTEX_AI_SERVICE_ACCOUNT}
+    network: null  # Use default VPC
+
+    # Training job configuration
+    machine_type: n1-standard-4    # 4 vCPUs, 15GB RAM
+    accelerator_type: null         # No GPU needed for XGBoost
+    accelerator_count: 0
+
+    # Container settings
+    container_uri: gcr.io/${GCP_PROJECT_ID}/exchange-rate-training:latest
+    replica_count: 1
+
+    # Experiment tracking
+    enable_tensorboard: false
+    enable_profiler: false
+
+# Data source configuration
+data:
+  source: bigquery  # Options: bigquery, csv, gcs
+
+  # BigQuery settings
+  bigquery:
+    project_id: ${GCP_PROJECT_ID}
+    dataset: data_ingestion
+    table: raw_data
+
+    # Query configuration
+    date_column: fecha
+    target_column: usdclp_obs
+
+    # Date range (null = all available data)
+    date_range:
+      start: "1991-01-01"  # Historical data start
+      end: null            # null = today
+
+  # CSV fallback (for local testing)
+  csv:
+    path: data/training_data.csv
+
+  # GCS path (after data is uploaded)
+  gcs:
+    input_path: ${GCS_BUCKET_DATA}/training/raw_data.csv
+    processed_path: ${GCS_BUCKET_DATA}/training/processed_data.csv
+
+# Feature engineering configuration
+feature_engineering:
+  # Lag features configuration
+  lag_features:
+    enabled: true
+    lags: [1, 2, 3, 7, 14, 30, 60, 90, 180, 365]
+    columns:
+      - usdclp_obs
+
+  # Rolling window features
+  rolling_features:
+    enabled: true
+    windows: [7, 14, 30, 60, 90, 180, 365]
+    functions:
+      - mean   # rolling_mean
+      - std    # rolling_std
+      - min    # rolling_min
+      - max    # rolling_max
+    columns:
+      - usdclp_obs
+
+  # Technical indicators
+  technical_indicators:
+    enabled: true
+
+    # Bollinger Bands
+    bollinger_bands:
+      window: 20
+      num_std: 2
+
+    # RSI (Relative Strength Index)
+    rsi:
+      window: 14
+
+    # MACD
+    macd:
+      fast_period: 12
+      slow_period: 26
+      signal_period: 9
+
+  # Ratio features
+  ratio_features:
+    enabled: true
+    ratios:
+      - ratio_vs_ma7    # price / 7-day MA
+      - ratio_vs_ma30   # price / 30-day MA
+      - ratio_vs_ma365  # price / 365-day MA
+
+  # Date features (NOT used in model_balanced but available)
+  date_features:
+    enabled: false
+
+  # Feature selection (13 balanced features)
+  feature_selection:
+    method: manual  # Use predefined list from model_config.yaml
+    config_path: config/model_config.yaml
+
+# Model configuration
+model:
+  config_path: config/model_config.yaml
+
+  # Training settings
+  train_test_split:
+    test_size: 0.2
+    shuffle: false  # CRITICAL: temporal split for time series
+    random_state: 42
+
+  # Cross-validation (disabled for time series)
+  cross_validation:
+    enabled: false
+
+# Output configuration (MLOps best practices)
+output:
+  # Local output (for testing)
+  local:
+    model_dir: models/
+    logs_dir: logs/
+    artifacts_dir: artifacts/
+
+  # GCS output (for production)
+  gcs:
+    # Model artifacts - {version} will be replaced with timestamp (YYYYMMDD_HHMMSS)
+    model_path: gs://ml-project-forecast/models/model_balanced/{version}/model.pkl.gz
+    metadata_path: gs://ml-project-forecast/models/model_balanced/{version}/metadata.json
+    features_path: gs://ml-project-forecast/models/model_balanced/{version}/features.json
+    config_path: gs://ml-project-forecast/models/model_balanced/{version}/config.yaml
+
+    # Training data (for reproducibility)
+    train_data_path: gs://ml-project-forecast/data/training/{version}/train_data.csv
+    test_data_path: gs://ml-project-forecast/data/training/{version}/test_data.csv
+
+    # Artifacts (metrics, plots)
+    metrics_path: gs://ml-project-forecast/artifacts/model_balanced/{version}/metrics.json
+    plots_path: gs://ml-project-forecast/artifacts/model_balanced/{version}/plots/
+    logs_path: gs://ml-project-forecast/logs/training/{version}/training.log
+
+  # Versioning strategy
+  versioning:
+    strategy: timestamp  # Options: semantic, timestamp, auto_increment
+    # Version format: YYYYMMDD_HHMMSS (e.g., 20251225_143022)
+
+  # Artifact format
+  model_format: pickle  # Options: pickle, joblib
+  compression: gzip     # Compress model files
+
+# Training job configuration
+training:
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 20
+    metric: validation_rmse
+    min_delta: 0.01
+
+  # Logging
+  verbose: true
+  log_interval: 10  # Log every 10 iterations
+
+  # Random seeds (for reproducibility)
+  random_state: 42
+  numpy_seed: 42
+
+  # Resource limits
+  timeout_seconds: 3600  # 1 hour max
+
+# Validation configuration
+validation:
+  enabled: true
+
+  # Overfitting checks
+  check_overfitting: true
+  overfitting_thresholds:
+    rmse_diff_max: 10.0   # Max acceptable RMSE difference
+    r2_diff_max: 0.15     # Max acceptable R² difference
+
+  # Performance thresholds (fail training if not met)
+  performance_gates:
+    enabled: true
+    min_test_r2: 0.85
+    max_test_rmse: 10.0
+
+  # Generate validation plots
+  generate_plots: true
+  plot_types:
+    - predictions_vs_actual
+    - residuals
+    - feature_importance
+    - learning_curve
+
+# Experiment tracking (MLOps best practice)
+experiment_tracking:
+  enabled: true
+  backend: gcs  # Options: mlflow, wandb, gcs, local
+
+  # Experiment metadata
+  experiment_name: exchange_rate_model_balanced
+  run_name_prefix: training_run
+
+  # What to track
+  track_parameters: true
+  track_metrics: true
+  track_artifacts: true
+  track_code_version: true
+  track_git_commit: true
+
+  # Tags
+  default_tags:
+    model_type: xgboost
+    model_name: model_balanced
+    features: 13
+    use_case: exchange_rate_prediction
+
+# Notifications (optional)
+notifications:
+  enabled: false
+
+  # Email notifications
+  email:
+    enabled: false
+    recipients: []
+    on_success: true
+    on_failure: true
+
+  # Slack notifications
+  slack:
+    enabled: false
+    webhook_url: ${SLACK_WEBHOOK_URL}
+
+# Monitoring and logging
+logging:
+  level: INFO
+  format: "json"  # JSON for Cloud Logging
+
+  handlers:
+    - console
+    - file
+    - gcs
+
+  # Structured logging fields
+  include_fields:
+    - timestamp
+    - level
+    - message
+    - module
+    - function
+    - line_number
+    - training_metrics
+    - git_commit
+
+# Development/Production flags
+environment: ${ENVIRONMENT:-development}  # development, staging, production
+
+# Resource cleanup
+cleanup:
+  delete_temp_files: true
+  keep_local_artifacts: false  # Delete local files after uploading to GCS
