@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature-trainningmodel  # ← Added for testing
 
   schedule:
     # Run daily at 9 AM UTC (adjust to your timezone)
