@@ -103,11 +103,20 @@ def submit_training_job(
     print("")
 
     # Wait for job completion (optional)
-    wait = input("Wait for job completion? (y/n): ")
-    if wait.lower() == 'y':
-        print("\nWaiting for job to complete...")
-        job.wait()
-        print(f"\nJob completed with state: {job.state}")
+    # Check if running in CI/CD environment (no interactive input)
+    import sys
+    if sys.stdin.isatty():
+        # Running interactively
+        wait = input("Wait for job completion? (y/n): ")
+        if wait.lower() == 'y':
+            print("\nWaiting for job to complete...")
+            job.wait()
+            print(f"\nJob completed with state: {job.state}")
+    else:
+        # Running in CI/CD (GitHub Actions, etc.)
+        print("\nRunning in non-interactive mode (CI/CD)")
+        print("Job submitted successfully. Not waiting for completion.")
+        print("Monitor the job in the Vertex AI console.")
 
     return job
 

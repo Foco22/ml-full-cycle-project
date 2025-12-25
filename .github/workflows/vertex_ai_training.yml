@@ -1,0 +1,139 @@
+name: Vertex AI Model Training
+
+on:
+  push:
+    branches:
+      - main
+      - feature-trainningmodel  # For testing
+    paths:
+      - 'src/training/**'
+      - 'config/**'
+      - 'vertex_ai/**'
+      - '.github/workflows/vertex_ai_training.yml'
+
+  workflow_dispatch:
+    # Allow manual trigger
+    inputs:
+      machine_type:
+        description: 'Machine type for training'
+        required: false
+        default: 'n1-standard-4'
+        type: choice
+        options:
+          - n1-standard-4
+          - n1-standard-8
+          - n1-highmem-4
+      image_tag:
+        description: 'Docker image tag'
+        required: false
+        default: 'latest'
+        type: string
+
+jobs:
+  build_and_train:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker gcr.io --quiet
+
+      - name: Set environment variables
+        run: |
+          echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ github.event.inputs.image_tag || 'latest' }}" >> $GITHUB_ENV
+          echo "MACHINE_TYPE=${{ github.event.inputs.machine_type || 'n1-standard-4' }}" >> $GITHUB_ENV
+          echo "GIT_SHA=${GITHUB_SHA::8}" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -f vertex_ai/Dockerfile \
+            -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG} \
+            -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${GIT_SHA} \
+            --build-arg GIT_COMMIT=${GITHUB_SHA} \
+            .
+
+          echo "✓ Docker image built successfully"
+          docker images | grep exchange-rate-training
+
+      - name: Push Docker image to GCR
+        run: |
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG}
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${GIT_SHA}
+
+          echo "✓ Image pushed to GCR:"
+          echo "  gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG}"
+          echo "  gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${GIT_SHA}"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-cloud-aiplatform PyYAML
+
+      - name: Submit Vertex AI training job
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          VERTEX_AI_SERVICE_ACCOUNT: ${{ secrets.VERTEX_AI_SERVICE_ACCOUNT }}
+          GCS_BUCKET_DATA: ${{ secrets.GCS_BUCKET_DATA }}
+          GCS_BUCKET_MODELS: ${{ secrets.GCS_BUCKET_MODELS }}
+          GCS_BUCKET_ARTIFACTS: ${{ secrets.GCS_BUCKET_ARTIFACTS }}
+          GCS_BUCKET_LOGS: ${{ secrets.GCS_BUCKET_LOGS }}
+        run: |
+          python vertex_ai/submit_training_job.py \
+            --project-id ${{ secrets.GCP_PROJECT_ID }} \
+            --region us-central1 \
+            --image-uri gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG} \
+            --machine-type ${MACHINE_TYPE} \
+            --service-account ${{ secrets.VERTEX_AI_SERVICE_ACCOUNT }}
+
+      - name: Upload workflow logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-workflow-logs
+          path: |
+            logs/
+          retention-days: 7
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "=========================================="
+          echo "✓ Training job submitted successfully!"
+          echo "=========================================="
+          echo "Project: ${{ secrets.GCP_PROJECT_ID }}"
+          echo "Image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG}"
+          echo "Machine: ${MACHINE_TYPE}"
+          echo ""
+          echo "Monitor job at:"
+          echo "https://console.cloud.google.com/vertex-ai/training/custom-jobs?project=${{ secrets.GCP_PROJECT_ID }}"
+          echo ""
+          echo "View model artifacts at:"
+          echo "gs://ml-project-forecast/models/model_balanced/"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "=========================================="
+          echo "✗ Training job submission failed!"
+          echo "=========================================="
+          echo "Check the logs above for details"
+          exit 1
