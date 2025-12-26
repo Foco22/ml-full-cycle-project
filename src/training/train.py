@@ -91,6 +91,23 @@ def load_data_from_bigquery(config: Dict) -> pd.DataFrame:
 
     logger.info(f"Loaded {len(df):,} rows from BigQuery")
 
+    # Data quality checks
+    if len(df) > 0:
+        logger.info(f"Date range: {df[bq_config['date_column']].min()} to {df[bq_config['date_column']].max()}")
+        logger.info(f"Columns: {list(df.columns)}")
+        target_col = bq_config.get('target_column', 'usdclp_obs')
+        if target_col in df.columns:
+            logger.info(f"{target_col} statistics:")
+            logger.info(f"  Min: {df[target_col].min():.2f}")
+            logger.info(f"  Max: {df[target_col].max():.2f}")
+            logger.info(f"  Mean: {df[target_col].mean():.2f}")
+            logger.info(f"  Std: {df[target_col].std():.2f}")
+            logger.info(f"  Missing: {df[target_col].isna().sum()}")
+        else:
+            logger.warning(f"Target column '{target_col}' not found in data!")
+    else:
+        logger.error("No data loaded from BigQuery!")
+
     return df
 
 
