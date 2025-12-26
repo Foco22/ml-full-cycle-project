@@ -36,10 +36,11 @@ def submit_training_job(
         enable_tensorboard: Whether to enable Tensorboard
     """
     # Initialize Vertex AI
+    # Note: staging_bucket must be in the same region as Vertex AI (us-central1)
     aiplatform.init(
         project=project_id,
         location=region,
-        staging_bucket='gs://ml-project-forecast'
+        staging_bucket='gs://ml-project-479423-training'
     )
 
     # Generate job display name
