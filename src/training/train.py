@@ -163,13 +163,46 @@ def prepare_data(
     # Train/test split
     split_config = config['model']['train_test_split']
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=split_config['test_size'],
-        shuffle=split_config['shuffle'],
-        random_state=split_config['random_state']
-    )
+    # Check if we should use date-based split (last N months for test)
+    test_months = split_config.get('test_months')
+
+    if test_months:
+        # Date-based split: last N months for test
+        logger.info(f"Using date-based split: last {test_months} months for test")
+
+        # Get date column from original dataframe
+        date_col = config['data'].get('bigquery', {}).get('date_column', 'Fecha')
+
+        # Calculate split date
+        from datetime import timedelta
+        max_date = df[date_col].max()
+        split_date = max_date - timedelta(days=test_months * 30)  # Approximate months as 30 days
+
+        logger.info(f"Data range: {df[date_col].min()} to {max_date}")
+        logger.info(f"Split date: {split_date}")
+        logger.info(f"Train: < {split_date}, Test: >= {split_date}")
+
+        # Create train/test masks based on date
+        # Need to align with X, y indices after feature engineering
+        train_mask = df[date_col] < split_date
+        test_mask = df[date_col] >= split_date
+
+        # Apply masks to X and y (they should have same index as df after dropna)
+        X_train = X[train_mask.loc[X.index]]
+        X_test = X[test_mask.loc[X.index]]
+        y_train = y[train_mask.loc[y.index]]
+        y_test = y[test_mask.loc[y.index]]
+    else:
+        # Percentage-based split (original method)
+        logger.info(f"Using percentage-based split: {split_config['test_size']*100}% for test")
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=split_config['test_size'],
+            shuffle=split_config['shuffle'],
+            random_state=split_config['random_state']
+        )
 
     logger.info(f"Train samples: {len(X_train):,}")
     logger.info(f"Test samples: {len(X_test):,}")

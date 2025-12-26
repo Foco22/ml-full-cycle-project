@@ -126,6 +126,10 @@ model:
 
   # Training settings
   train_test_split:
+    # Date-based split: last N months for test (for time series)
+    test_months: 12  # Use last 12 months for test set
+
+    # Fallback percentage-based split (if test_months not set)
     test_size: 0.2
     shuffle: false  # CRITICAL: temporal split for time series
     random_state: 42
