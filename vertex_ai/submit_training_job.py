@@ -38,7 +38,8 @@ def submit_training_job(
     # Initialize Vertex AI
     aiplatform.init(
         project=project_id,
-        location=region
+        location=region,
+        staging_bucket='gs://ml-project-forecast'
     )
 
     # Generate job display name
