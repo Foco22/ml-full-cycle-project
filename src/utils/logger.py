@@ -49,3 +49,7 @@ def setup_logger(name: str, log_dir: str = "logs", log_level: int = logging.INFO
     logger.addHandler(file_handler)
 
     return logger
+
+
+# Alias for compatibility
+get_logger = setup_logger
