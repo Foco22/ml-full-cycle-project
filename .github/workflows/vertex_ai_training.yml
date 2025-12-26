@@ -51,9 +51,9 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for GCR
+      - name: Configure Docker for Artifact Registry
         run: |
-          gcloud auth configure-docker gcr.io --quiet
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Set environment variables
         run: |
@@ -66,22 +66,22 @@ jobs:
         run: |
           docker build \
             -f vertex_ai/Dockerfile \
-            -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG} \
-            -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${GIT_SHA} \
+            -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training/exchange-rate-training:${IMAGE_TAG} \
+            -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training/exchange-rate-training:${GIT_SHA} \
             --build-arg GIT_COMMIT=${GITHUB_SHA} \
             .
 
           echo "✓ Docker image built successfully"
           docker images | grep exchange-rate-training
 
-      - name: Push Docker image to GCR
+      - name: Push Docker image to Artifact Registry
         run: |
-          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG}
-          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${GIT_SHA}
+          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training/exchange-rate-training:${IMAGE_TAG}
+          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training/exchange-rate-training:${GIT_SHA}
 
-          echo "✓ Image pushed to GCR:"
-          echo "  gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG}"
-          echo "  gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${GIT_SHA}"
+          echo "✓ Image pushed to Artifact Registry:"
+          echo "  us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training/exchange-rate-training:${IMAGE_TAG}"
+          echo "  us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training/exchange-rate-training:${GIT_SHA}"
 
       - name: Install Python dependencies
         run: |
@@ -100,7 +100,7 @@ jobs:
           python vertex_ai/submit_training_job.py \
             --project-id ${{ secrets.GCP_PROJECT_ID }} \
             --region us-central1 \
-            --image-uri gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG} \
+            --image-uri us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training/exchange-rate-training:${IMAGE_TAG} \
             --machine-type ${MACHINE_TYPE} \
             --service-account ${{ secrets.VERTEX_AI_SERVICE_ACCOUNT }}
 
@@ -120,7 +120,7 @@ jobs:
           echo "✓ Training job submitted successfully!"
           echo "=========================================="
           echo "Project: ${{ secrets.GCP_PROJECT_ID }}"
-          echo "Image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training:${IMAGE_TAG}"
+          echo "Image: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/exchange-rate-training/exchange-rate-training:${IMAGE_TAG}"
           echo "Machine: ${MACHINE_TYPE}"
           echo ""
           echo "Monitor job at:"
