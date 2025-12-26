@@ -1,6 +1,15 @@
 name: Vertex AI Model Training
 
 on:
+  # Scheduled automatic training (runs every Monday at midnight UTC)
+  schedule:
+    - cron: '0 0 * * 1'  # Every Monday at 00:00 UTC
+    # Other examples:
+    # - cron: '0 0 * * 0'  # Every Sunday
+    # - cron: '0 0 1 * *'  # Every 1st of the month
+    # - cron: '0 0 * * 1-5'  # Every weekday (Mon-Fri)
+
+  # Trigger on code changes
   push:
     branches:
       - main
@@ -12,6 +21,7 @@ on:
       - 'vertex_ai/**'
       - '.github/workflows/vertex_ai_training.yml'
 
+  # Manual trigger
   workflow_dispatch:
     # Allow manual trigger
     inputs:
