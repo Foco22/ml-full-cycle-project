@@ -58,6 +58,11 @@ config/secrets.yaml
 config/gcp-key.json
 parameters.json
 
+# Compiled Pipeline Definitions (generated files)
+*_pipeline.json
+simple_training_pipeline.json
+exchange_rate_training_pipeline.json
+
 # OS
 .DS_Store
 Thumbs.db
