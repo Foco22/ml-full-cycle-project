@@ -11,16 +11,26 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def upload_to_gcs(local_path: str, bucket_name: str, blob_name: str, project_id: str):
+def upload_to_gcs(local_path: str, gcs_path: str, blob_name: str = None, project_id: str = None):
     """
     Upload file to Google Cloud Storage
 
     Args:
         local_path: Path to local file
-        bucket_name: GCS bucket name
-        blob_name: Destination blob name
-        project_id: GCP project ID
+        gcs_path: GCS URI (gs://bucket/path) or bucket name
+        blob_name: Destination blob name (optional if gcs_path is URI)
+        project_id: GCP project ID (optional, uses default credentials)
     """
+    # Parse GCS URI if provided
+    if gcs_path.startswith('gs://'):
+        # Extract bucket and blob from URI: gs://bucket/path/to/file
+        gcs_path = gcs_path[5:]  # Remove 'gs://'
+        parts = gcs_path.split('/', 1)
+        bucket_name = parts[0]
+        blob_name = parts[1] if len(parts) > 1 else blob_name
+    else:
+        bucket_name = gcs_path
+
     storage_client = storage.Client(project=project_id)
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
@@ -102,3 +112,7 @@ def create_bucket(bucket_name: str, location: str, project_id: str):
 
     bucket = storage_client.create_bucket(bucket)
     logger.info(f"Created bucket {bucket_name} in {location}")
+
+
+# Alias for compatibility
+list_gcs_files = list_blobs
