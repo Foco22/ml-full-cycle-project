@@ -69,8 +69,7 @@ def submit_training_job(
                     'args': ['--config', 'config/training_config.yaml']
                 },
             }
-        ],
-        service_account=service_account
+        ]
     )
 
     print("Submitting job...")
@@ -78,6 +77,7 @@ def submit_training_job(
 
     # Submit job
     job.submit(
+        service_account=service_account,
         restart_job_on_worker_restart=False,
         enable_web_access=False,
         tensorboard=None  # Can be configured if needed
