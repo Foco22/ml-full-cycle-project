@@ -37,10 +37,12 @@ def submit_training_job(
     """
     # Initialize Vertex AI
     # Note: staging_bucket must be in the same region as Vertex AI (us-central1)
+    # This bucket is only for Vertex AI staging files
+    # Model artifacts are saved to ml-project-forecast
     aiplatform.init(
         project=project_id,
         location=region,
-        staging_bucket='gs://ml-project-forecast'
+        staging_bucket='gs://ml-project-479423-training'
     )
 
     # Generate job display name
