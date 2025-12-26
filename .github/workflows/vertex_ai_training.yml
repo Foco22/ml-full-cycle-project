@@ -7,6 +7,7 @@ on:
       - feature-trainningmodel  # For testing
     paths:
       - 'src/training/**'
+      - 'src/utils/**'
       - 'config/**'
       - 'vertex_ai/**'
       - '.github/workflows/vertex_ai_training.yml'
