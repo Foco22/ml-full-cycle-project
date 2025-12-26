@@ -40,7 +40,7 @@ def submit_training_job(
     aiplatform.init(
         project=project_id,
         location=region,
-        staging_bucket='gs://ml-project-479423-training'
+        staging_bucket='gs://ml-project-forecast'
     )
 
     # Generate job display name
