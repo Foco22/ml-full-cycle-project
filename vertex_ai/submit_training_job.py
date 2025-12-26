@@ -77,8 +77,9 @@ def submit_training_job(
     print("")
 
     # Submit job
+    # Note: service_account parameter removed to use default Compute Engine service account
+    # This avoids permission issues with service account impersonation
     job.submit(
-        service_account=service_account,
         restart_job_on_worker_restart=False,
         enable_web_access=False,
         tensorboard=None  # Can be configured if needed
