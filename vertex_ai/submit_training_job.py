@@ -57,6 +57,24 @@ def submit_training_job(
     print(f"Machine Type: {machine_type}")
     print("")
 
+    # Prepare environment variables for container
+    container_env = [
+        {'name': 'GCP_PROJECT_ID', 'value': project_id},
+    ]
+
+    # Add optional environment variables if they exist
+    optional_env_vars = {
+        'VERTEX_AI_SERVICE_ACCOUNT': os.getenv('VERTEX_AI_SERVICE_ACCOUNT'),
+        'GCS_BUCKET_DATA': os.getenv('GCS_BUCKET_DATA'),
+        'GCS_BUCKET_MODELS': os.getenv('GCS_BUCKET_MODELS'),
+        'GCS_BUCKET_ARTIFACTS': os.getenv('GCS_BUCKET_ARTIFACTS'),
+        'GCS_BUCKET_LOGS': os.getenv('GCS_BUCKET_LOGS'),
+    }
+
+    for key, value in optional_env_vars.items():
+        if value:
+            container_env.append({'name': key, 'value': value})
+
     # Create custom job
     job = aiplatform.CustomJob(
         display_name=job_display_name,
@@ -68,7 +86,8 @@ def submit_training_job(
                 'replica_count': 1,
                 'container_spec': {
                     'image_uri': image_uri,
-                    'args': ['--config', 'config/training_config.yaml']
+                    'args': ['--config', 'config/training_config.yaml'],
+                    'env': container_env
                 },
             }
         ]
