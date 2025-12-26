@@ -46,7 +46,7 @@ data:
     table: raw_data
 
     # Query configuration
-    date_column: fecha
+    date_column: Fecha  # Capitalized for pandas case-sensitivity
     target_column: usdclp_obs
 
     # Date range (null = all available data)
