@@ -173,3 +173,4 @@ gs://ml-project-forecast/
 ```# Trigger training workflow
 # Updated vie 26 dic 2025 10:44:54 GMT
 # Retry with repoAdmin vie 26 dic 2025 10:47:24 GMT
+# Trigger after logger fix
